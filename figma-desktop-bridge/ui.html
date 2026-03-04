@@ -798,6 +798,13 @@
 
       // Start WebSocket connection via port scanning
       wsScanAndConnect();
+
+      // Periodically rescan for new MCP servers so the plugin auto-discovers
+      // new Claude Code sessions without requiring a plugin restart.
+      // wsScanAndConnect() already guards against overlapping scans (isScanning)
+      // and skips ports with active connections (isPortConnected), so this is
+      // safe and lightweight — just a few localhost WebSocket probes every 5s.
+      setInterval(wsScanAndConnect, 5000);
     })();
 
     // ============================================================================
