@@ -107,10 +107,19 @@
       font-size: 14px;
       line-height: 1;
       opacity: 0.6;
-      transition: opacity 0.15s;
+      transition: opacity 0.15s, transform 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .toolbar-btn:hover {
       opacity: 1;
+    }
+    .rescan-btn {
+      font-size: 18px;
+    }
+    .chevron-btn {
+      margin-left: auto;
     }
     .rescan-btn.spinning {
       animation: spin 1s linear infinite;
@@ -212,11 +221,23 @@
     .conn-dot.connected ~ .conn-label {
       color: var(--figma-color-text, rgba(255, 255, 255, 0.85));
     }
+    .conn-row.connected-row {
+      cursor: pointer;
+    }
+    .conn-row.connected-row:hover {
+      background: rgba(242, 72, 34, 0.1);
+    }
+    .conn-row.connected-row:hover .conn-dot.connected {
+      background: #f24822;
+      box-shadow: 0 0 4px rgba(242, 72, 34, 0.5);
+    }
+    .conn-row.connected-row:hover .conn-label {
+      color: rgba(255, 255, 255, 0.6);
+    }
     .kill-btn {
       background: none;
       border: none;
       color: rgba(255, 255, 255, 0.35);
-      cursor: pointer;
       font-size: 13px;
       width: 18px;
       height: 18px;
@@ -226,11 +247,11 @@
       flex-shrink: 0;
       border-radius: 3px;
       opacity: 0;
-      transition: opacity 0.1s, background 0.1s, color 0.1s;
+      transition: opacity 0.1s;
+      pointer-events: none;
     }
-    .conn-row:hover .kill-btn { opacity: 1; }
-    .kill-btn:hover {
-      background: rgba(242, 72, 34, 0.15);
+    .conn-row.connected-row:hover .kill-btn {
+      opacity: 1;
       color: #f24822;
     }
 
@@ -262,7 +283,11 @@
       </div>
       <button class="toolbar-btn rescan-btn" id="rescan-btn" title="Rescan ports">&#x27f3;</button>
       <button class="toolbar-btn autoscan-btn" id="autoscan-btn" title="Pause auto-scan">&#x23F8;</button>
-      <button class="toolbar-btn chevron-btn" id="chevron-btn" title="Show details">&#x25be;</button>
+      <button class="toolbar-btn chevron-btn" id="chevron-btn" title="Show details">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
     </div>
     <div class="expanded-panel" id="expanded-panel">
       <div class="panel-section">
@@ -322,7 +347,7 @@
       var chevron = document.getElementById('chevron-btn');
       panel.classList.toggle('open', panelExpanded);
       container.classList.toggle('expanded', panelExpanded);
-      chevron.innerHTML = panelExpanded ? '&#x25b4;' : '&#x25be;';
+      chevron.style.transform = panelExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
       chevron.title = panelExpanded ? 'Hide details' : 'Show details';
       // Resize the plugin window to fit the panel
       parent.postMessage({ pluginMessage: {
@@ -366,12 +391,13 @@
           else if (rs === 0) state = 'connecting';
         }
 
-        var dotClass, label, killBtn = '';
+        var dotClass, label, rowClass = 'conn-row', killBtn = '';
         if (state === 'connected') {
           dotClass = 'conn-dot connected';
           var startTime = connectionStartTimes[port];
           label = 'connected' + (startTime ? ' \u00b7 ' + formatTime(startTime) : '');
-          killBtn = '<button class="kill-btn" data-port="' + port + '" title="Disconnect">\u00d7</button>';
+          rowClass += ' connected-row';
+          killBtn = '<span class="kill-btn">\u00d7</span>';
         } else if (state === 'connecting') {
           dotClass = 'conn-dot connecting';
           label = 'connecting\u2026';
@@ -381,7 +407,7 @@
           label = dt ? 'disconnected \u00b7 ' + formatRelative(dt.getTime()) + ' ago' : 'idle';
         }
 
-        html += '<div class="conn-row">' +
+        html += '<div class="' + rowClass + '" data-port="' + port + '">' +
           '<span class="conn-port">:' + port + '</span>' +
           '<div class="' + dotClass + '"></div>' +
           '<span class="conn-label">' + escapeHtml(label) + '</span>' +
@@ -390,10 +416,10 @@
       }
       container.innerHTML = html;
 
-      // Wire kill buttons
-      var btns = container.querySelectorAll('.kill-btn');
-      for (var j = 0; j < btns.length; j++) {
-        btns[j].addEventListener('click', function() {
+      // Wire connected rows — entire row is clickable to kill
+      var rows = container.querySelectorAll('.connected-row');
+      for (var j = 0; j < rows.length; j++) {
+        rows[j].addEventListener('click', function() {
           var p = parseInt(this.getAttribute('data-port'), 10);
           if (window.__killConnection) window.__killConnection(p);
         });
