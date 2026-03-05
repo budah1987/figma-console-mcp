@@ -849,7 +849,7 @@
        * Falls back to retry with backoff if no servers found at all.
        */
       // Expose manual rescan trigger for UI button
-      window.__triggerRescan = function() { wsScanAndConnect(); };
+      window.__triggerRescan = function() { killedPorts = {}; wsScanAndConnect(); };
 
       window.__killConnection = function(port) {
         for (var i = 0; i < activeConnections.length; i++) {
@@ -876,8 +876,8 @@
 
         var portsToTry = [];
         for (var p = WS_PORT_RANGE_START; p <= WS_PORT_RANGE_END; p++) {
-          // Skip ports we're already connected to
-          if (!isPortConnected(p)) {
+          // Skip ports we're already connected to, or that the user killed
+          if (!isPortConnected(p) && !killedPorts[p]) {
             portsToTry.push(p);
           }
         }
@@ -915,7 +915,6 @@
               console.log('[MCP Bridge] WebSocket connected to port ' + port + ' (' + activeConnections.length + ' server(s) total)');
               connectionStartTimes[port] = new Date();
               delete disconnectTimes[port];
-              delete killedPorts[port];
               updateSessionCount(activeConnections.length);
               if (panelExpanded) renderConnections();
 
