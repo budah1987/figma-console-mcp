@@ -912,8 +912,8 @@
 
         var portsToTry = [];
         for (var p = WS_PORT_RANGE_START; p <= WS_PORT_RANGE_END; p++) {
-          // Skip ports we're already connected to, or that the user killed
-          if (!isPortConnected(p) && !killedPorts[p]) {
+          // Skip ports we're already connected to
+          if (!isPortConnected(p)) {
             portsToTry.push(p);
           }
         }
@@ -951,6 +951,7 @@
               console.log('[MCP Bridge] WebSocket connected to port ' + port + ' (' + activeConnections.length + ' server(s) total)');
               connectionStartTimes[port] = new Date();
               delete disconnectTimes[port];
+              if (killedPorts[port]) { delete killedPorts[port]; saveKilledPorts(); }
               updateSessionCount(activeConnections.length);
               if (panelExpanded) renderConnections();
 
@@ -1019,7 +1020,6 @@
        * then does a full rescan to pick up any new servers.
        */
       function wsReconnectPort(port) {
-        if (killedPorts[port]) return;
         try {
           var testWs = new WebSocket('ws://localhost:' + port);
           var timeout = setTimeout(function() {
@@ -1036,6 +1036,11 @@
             activeConnections.push({ port: port, ws: testWs });
             updateCompatState();
             console.log('[MCP Bridge] Reconnected to port ' + port + ' (' + activeConnections.length + ' server(s) total)');
+            connectionStartTimes[port] = new Date();
+            delete disconnectTimes[port];
+            if (killedPorts[port]) { delete killedPorts[port]; saveKilledPorts(); }
+            updateSessionCount(activeConnections.length);
+            if (panelExpanded) renderConnections();
             attachWsHandlers(testWs, port);
             initializeConnection(testWs, port);
           };
