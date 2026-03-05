@@ -169,74 +169,66 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 2px 0;
-      font-size: 11px;
+      padding: 3px 0;
+      font-size: 10px;
     }
     .conn-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #18a957;
       flex-shrink: 0;
+    }
+    .conn-dot.connected {
+      background: #18a957;
+      box-shadow: 0 0 4px rgba(24, 169, 87, 0.5);
+    }
+    .conn-dot.connecting {
+      background: #f5a623;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .conn-dot.idle {
+      background: rgba(255, 255, 255, 0.15);
     }
     .conn-port {
       font-family: 'SF Mono', 'Menlo', monospace;
       font-size: 10px;
-      color: var(--figma-color-text, rgba(255, 255, 255, 0.9));
-    }
-    .conn-time {
-      margin-left: auto;
       color: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.5));
-      font-size: 10px;
-    }
-
-    /* Activity log rows */
-    .activity-row {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 2px 0;
-      font-size: 10px;
-      color: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.7));
-    }
-    .activity-icon {
-      width: 12px;
-      text-align: center;
       flex-shrink: 0;
-      font-size: 10px;
     }
-    .activity-icon.cmd { color: #7b8794; }
-    .activity-icon.connect { color: #18a957; }
-    .activity-icon.disconnect { color: #f24822; }
-    .activity-icon.scan { color: #f5a623; }
-    .activity-text {
+    .conn-label {
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    .activity-time {
-      flex-shrink: 0;
       color: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.4));
       font-size: 10px;
     }
-    .empty-state {
-      color: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.3));
-      font-size: 10px;
-      font-style: italic;
-      padding: 2px 0;
+    .conn-dot.connected ~ .conn-label {
+      color: var(--figma-color-text, rgba(255, 255, 255, 0.85));
     }
+    .kill-btn {
+      background: none;
+      border: none;
+      color: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.3));
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0 2px;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .conn-row:hover .kill-btn { opacity: 1; }
+    .kill-btn:hover { color: #f24822; }
 
     /* Light theme additions */
     @media (prefers-color-scheme: light) {
       .toolbar-btn { color: #999; }
       .session-count { color: #999; }
       .section-label { color: #999; }
-      .conn-time { color: #999; }
-      .activity-row { color: #666; }
-      .activity-time { color: #999; }
-      .activity-icon.cmd { color: #999; }
-      .empty-state { color: #bbb; }
+      .conn-port { color: #999; }
+      .conn-label { color: #bbb; }
+      .conn-dot.idle { background: rgba(0, 0, 0, 0.12); }
+      .kill-btn { color: rgba(0, 0, 0, 0.2); }
       .expanded-panel {
         background: #fff;
         border-color: #e5e5e5;
@@ -254,16 +246,12 @@
         <span class="session-count" id="session-count"></span>
       </div>
       <button class="toolbar-btn rescan-btn" id="rescan-btn" title="Rescan ports">&#x27f3;</button>
+      <button class="toolbar-btn autoscan-btn" id="autoscan-btn" title="Pause auto-scan">&#x23F8;</button>
       <button class="toolbar-btn chevron-btn" id="chevron-btn" title="Show details">&#x25be;</button>
     </div>
     <div class="expanded-panel" id="expanded-panel">
       <div class="panel-section">
-        <div class="section-label">Connections</div>
-        <div id="connections-list"><div class="empty-state">No connections</div></div>
-      </div>
-      <div class="panel-section">
-        <div class="section-label">Activity</div>
-        <div id="activity-list"><div class="empty-state">No activity yet</div></div>
+        <div id="connections-list"></div>
       </div>
     </div>
   </div>
@@ -282,10 +270,8 @@
 
     // UI state for expanded panel
     var panelExpanded = false;
-    var activityLog = []; // { icon, iconClass, text, timestamp }
-    var MAX_ACTIVITY = 20;
-    var connectionStartTimes = {}; // port -> Date
-    var VALID_ICON_CLASSES = { cmd: 1, connect: 1, disconnect: 1, scan: 1 };
+    var connectionStartTimes = {}; // port -> Date (when connected)
+    var disconnectTimes = {};      // port -> Date (when disconnected)
 
     // Escape HTML to prevent XSS from dynamic content
     function escapeHtml(str) {
@@ -326,11 +312,10 @@
       parent.postMessage({ pluginMessage: {
         type: 'RESIZE_UI',
         width: 260,
-        height: panelExpanded ? 280 : 36
+        height: panelExpanded ? 320 : 36
       } }, '*');
       if (panelExpanded) {
         renderConnections();
-        renderActivity();
       }
     }
 
@@ -344,54 +329,59 @@
       }
     }
 
-    // Add entry to activity log
-    function addActivity(icon, iconClass, text) {
-      activityLog.unshift({ icon: icon, iconClass: iconClass, text: text, timestamp: Date.now() });
-      if (activityLog.length > MAX_ACTIVITY) activityLog.pop();
-      if (panelExpanded) renderActivity();
-    }
-
-    // Render connections list
+    // Render all ports (9223-9232) with status
     function renderConnections() {
       var container = document.getElementById('connections-list');
       var conns = window.__activeConnections || [];
-      if (conns.length === 0) {
-        container.innerHTML = '<div class="empty-state">No connections</div>';
-        return;
-      }
-      var html = '';
+      var connMap = {};
       for (var i = 0; i < conns.length; i++) {
-        var c = conns[i];
-        if (c.ws.readyState !== 1) continue;
-        var startTime = connectionStartTimes[c.port];
-        var timeStr = startTime ? 'started ' + formatTime(startTime) : '';
-        html += '<div class="conn-row">' +
-          '<div class="conn-dot"></div>' +
-          '<span class="conn-port">:' + c.port + '</span>' +
-          '<span class="conn-time">' + timeStr + '</span>' +
-          '</div>';
+        connMap[conns[i].port] = conns[i];
       }
-      container.innerHTML = html || '<div class="empty-state">No connections</div>';
-    }
+      var start = window.__WS_PORT_RANGE_START || 9223;
+      var end = window.__WS_PORT_RANGE_END || 9232;
 
-    // Render activity log
-    function renderActivity() {
-      var container = document.getElementById('activity-list');
-      if (activityLog.length === 0) {
-        container.innerHTML = '<div class="empty-state">No activity yet</div>';
-        return;
-      }
       var html = '';
-      for (var i = 0; i < activityLog.length; i++) {
-        var e = activityLog[i];
-        var safeClass = VALID_ICON_CLASSES[e.iconClass] ? e.iconClass : '';
-        html += '<div class="activity-row">' +
-          '<span class="activity-icon ' + safeClass + '">' + escapeHtml(e.icon) + '</span>' +
-          '<span class="activity-text">' + escapeHtml(e.text) + '</span>' +
-          '<span class="activity-time">' + formatRelative(e.timestamp) + '</span>' +
+      for (var port = start; port <= end; port++) {
+        var conn = connMap[port];
+        var state = 'idle';
+        if (conn) {
+          var rs = conn.ws.readyState;
+          if (rs === 1) state = 'connected';
+          else if (rs === 0) state = 'connecting';
+        }
+
+        var dotClass, label, killBtn = '';
+        if (state === 'connected') {
+          dotClass = 'conn-dot connected';
+          var startTime = connectionStartTimes[port];
+          label = 'connected' + (startTime ? ' \u00b7 ' + formatTime(startTime) : '');
+          killBtn = '<button class="kill-btn" data-port="' + port + '" title="Disconnect">\u00d7</button>';
+        } else if (state === 'connecting') {
+          dotClass = 'conn-dot connecting';
+          label = 'connecting\u2026';
+        } else {
+          dotClass = 'conn-dot idle';
+          var dt = disconnectTimes[port];
+          label = dt ? 'disconnected \u00b7 ' + formatRelative(dt.getTime()) + ' ago' : 'idle';
+        }
+
+        html += '<div class="conn-row">' +
+          '<span class="conn-port">:' + port + '</span>' +
+          '<div class="' + dotClass + '"></div>' +
+          '<span class="conn-label">' + escapeHtml(label) + '</span>' +
+          killBtn +
           '</div>';
       }
       container.innerHTML = html;
+
+      // Wire kill buttons
+      var btns = container.querySelectorAll('.kill-btn');
+      for (var j = 0; j < btns.length; j++) {
+        btns[j].addEventListener('click', function() {
+          var p = parseInt(this.getAttribute('data-port'), 10);
+          if (window.__killConnection) window.__killConnection(p);
+        });
+      }
     }
 
     // Wire up buttons
@@ -399,13 +389,18 @@
     document.getElementById('rescan-btn').addEventListener('click', function() {
       if (window.__triggerRescan) window.__triggerRescan();
     });
-
-    // Refresh relative timestamps and connections every second
-    setInterval(function() {
-      if (panelExpanded) {
-        renderActivity();
-        renderConnections();
+    document.getElementById('autoscan-btn').addEventListener('click', function() {
+      if (window.__toggleAutoScan) {
+        var enabled = window.__toggleAutoScan();
+        var btn = document.getElementById('autoscan-btn');
+        btn.innerHTML = enabled ? '&#x23F8;' : '&#x25B6;';
+        btn.title = enabled ? 'Pause auto-scan' : 'Resume auto-scan';
       }
+    });
+
+    // Refresh "Nm ago" timers every second when panel is open
+    setInterval(function() {
+      if (panelExpanded) renderConnections();
     }, 1000);
 
     // UI update helper
@@ -720,6 +715,8 @@
       var activeConnections = []; // Array of { port, ws }
       // Expose for UI rendering
       window.__activeConnections = activeConnections;
+      window.__WS_PORT_RANGE_START = WS_PORT_RANGE_START;
+      window.__WS_PORT_RANGE_END = WS_PORT_RANGE_END;
       var wsReconnectDelay = 500;
       var wsMaxReconnectDelay = 5000;
       var wsReconnectAttempts = 0;
@@ -853,6 +850,16 @@
       // Expose manual rescan trigger for UI button
       window.__triggerRescan = function() { wsScanAndConnect(); };
 
+      window.__killConnection = function(port) {
+        for (var i = 0; i < activeConnections.length; i++) {
+          if (activeConnections[i].port === port) {
+            activeConnections[i].ws.close();
+            return true;
+          }
+        }
+        return false;
+      };
+
       function wsScanAndConnect() {
         if (isScanning) return;
         isScanning = true;
@@ -864,7 +871,6 @@
         }
         var rescanBtn = document.getElementById('rescan-btn');
         if (rescanBtn) rescanBtn.classList.add('spinning');
-        addActivity('\u25cc', 'scan', 'Scanning ports...');
 
         var portsToTry = [];
         for (var p = WS_PORT_RANGE_START; p <= WS_PORT_RANGE_END; p++) {
@@ -906,8 +912,8 @@
 
               console.log('[MCP Bridge] WebSocket connected to port ' + port + ' (' + activeConnections.length + ' server(s) total)');
               connectionStartTimes[port] = new Date();
+              delete disconnectTimes[port];
               updateSessionCount(activeConnections.length);
-              addActivity('\u25cf', 'connect', ':' + port + ' connected');
               if (panelExpanded) renderConnections();
 
               // Attach handlers for this connection
@@ -1018,7 +1024,6 @@
             }
 
             var handler = methodMap[message.method];
-            addActivity('\u2193', 'cmd', message.method + ' :' + port);
             if (!handler) {
               activeWs.send(JSON.stringify({ id: message.id, error: 'Unknown method: ' + message.method }));
               return;
@@ -1046,8 +1051,8 @@
           removeConnection(port);
           console.log('[MCP Bridge] WebSocket disconnected from port ' + port + ' (' + activeConnections.length + ' server(s) remaining)');
           delete connectionStartTimes[port];
+          disconnectTimes[port] = new Date();
           updateSessionCount(activeConnections.length);
-          addActivity('\u2715', 'disconnect', ':' + port + ' disconnected');
           if (panelExpanded) renderConnections();
 
           // If replaced by same file reconnecting (e.g., plugin reloaded), stop
@@ -1131,7 +1136,18 @@
       // wsScanAndConnect() already guards against overlapping scans (isScanning)
       // and skips ports with active connections (isPortConnected), so this is
       // safe and lightweight — just a few localhost WebSocket probes every 5s.
-      setInterval(wsScanAndConnect, 5000);
+      var autoScanIntervalId = setInterval(wsScanAndConnect, 5000);
+
+      window.__toggleAutoScan = function() {
+        if (autoScanIntervalId) {
+          clearInterval(autoScanIntervalId);
+          autoScanIntervalId = null;
+          return false; // now disabled
+        } else {
+          autoScanIntervalId = setInterval(wsScanAndConnect, 5000);
+          return true; // now enabled
+        }
+      };
     })();
 
     // ============================================================================
