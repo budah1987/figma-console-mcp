@@ -225,34 +225,17 @@
       cursor: pointer;
     }
     .conn-row.connected-row:hover {
-      background: rgba(242, 72, 34, 0.1);
+      background: rgba(255, 255, 255, 0.06);
     }
-    .conn-row.connected-row:hover .conn-dot.connected {
-      background: #f24822;
-      box-shadow: 0 0 4px rgba(242, 72, 34, 0.5);
+    .conn-row.connected-row:hover .conn-label-text {
+      display: none;
     }
-    .conn-row.connected-row:hover .conn-label {
-      color: rgba(255, 255, 255, 0.6);
+    .conn-row.connected-row .conn-label-disconnect {
+      display: none;
     }
-    .kill-btn {
-      background: none;
-      border: none;
-      color: rgba(255, 255, 255, 0.35);
-      font-size: 13px;
-      width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      border-radius: 3px;
-      opacity: 0;
-      transition: opacity 0.1s;
-      pointer-events: none;
-    }
-    .conn-row.connected-row:hover .kill-btn {
-      opacity: 1;
-      color: #f24822;
+    .conn-row.connected-row:hover .conn-label-disconnect {
+      display: inline;
+      color: rgba(255, 255, 255, 0.5);
     }
 
     /* Light theme additions */
@@ -264,7 +247,6 @@
       .conn-label { color: #bbb; }
       .conn-dot.idle { background: rgba(0, 0, 0, 0.12); }
       .conn-row:hover { background: rgba(0, 0, 0, 0.04); }
-      .kill-btn { color: rgba(0, 0, 0, 0.2); }
       .expanded-panel {
         background: #fff;
         border-color: #e5e5e5;
@@ -391,32 +373,35 @@
           else if (rs === 0) state = 'connecting';
         }
 
-        var dotClass, label, rowClass = 'conn-row', killBtn = '';
+        var dotClass, rowClass = 'conn-row', labelHtml = '';
         if (state === 'connected') {
           dotClass = 'conn-dot connected';
           var startTime = connectionStartTimes[port];
-          label = 'connected' + (startTime ? ' \u00b7 ' + formatTime(startTime) : '');
+          var connLabel = 'connected' + (startTime ? ' \u00b7 ' + formatTime(startTime) : '');
           rowClass += ' connected-row';
-          killBtn = '<span class="kill-btn">\u00d7</span>';
+          labelHtml = '<span class="conn-label">' +
+            '<span class="conn-label-text">' + escapeHtml(connLabel) + '</span>' +
+            '<span class="conn-label-disconnect">disconnect</span>' +
+            '</span>';
         } else if (state === 'connecting') {
           dotClass = 'conn-dot connecting';
-          label = 'connecting\u2026';
+          labelHtml = '<span class="conn-label">connecting\u2026</span>';
         } else {
           dotClass = 'conn-dot idle';
           var dt = disconnectTimes[port];
-          label = dt ? 'disconnected \u00b7 ' + formatRelative(dt.getTime()) + ' ago' : 'idle';
+          var idleLabel = dt ? 'disconnected \u00b7 ' + formatRelative(dt.getTime()) + ' ago' : 'idle';
+          labelHtml = '<span class="conn-label">' + escapeHtml(idleLabel) + '</span>';
         }
 
         html += '<div class="' + rowClass + '" data-port="' + port + '">' +
           '<span class="conn-port">:' + port + '</span>' +
           '<div class="' + dotClass + '"></div>' +
-          '<span class="conn-label">' + escapeHtml(label) + '</span>' +
-          killBtn +
+          labelHtml +
           '</div>';
       }
       container.innerHTML = html;
 
-      // Wire connected rows — entire row is clickable to kill
+      // Wire connected rows — entire row is clickable to disconnect
       var rows = container.querySelectorAll('.connected-row');
       for (var j = 0; j < rows.length; j++) {
         rows[j].addEventListener('click', function() {
