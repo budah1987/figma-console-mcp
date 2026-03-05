@@ -884,7 +884,7 @@
        * Falls back to retry with backoff if no servers found at all.
        */
       // Expose manual rescan trigger for UI button
-      window.__triggerRescan = function() { killedPorts = {}; saveKilledPorts(); wsScanAndConnect(); };
+      window.__triggerRescan = function() { wsScanAndConnect(); };
 
       window.__killConnection = function(port) {
         for (var i = 0; i < activeConnections.length; i++) {
