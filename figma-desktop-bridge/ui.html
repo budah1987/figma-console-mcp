@@ -293,7 +293,14 @@
     var panelExpanded = false;
     var connectionStartTimes = {}; // port -> Date (when connected)
     var disconnectTimes = {};      // port -> Date (when disconnected)
-    var killedPorts = {};          // port -> true (user-initiated kill, skip reconnect)
+
+    // killedPorts persists across reloads via localStorage
+    var killedPorts = (function() {
+      try { return JSON.parse(localStorage.getItem('mcp-killed-ports') || '{}'); } catch(e) { return {}; }
+    })();
+    function saveKilledPorts() {
+      try { localStorage.setItem('mcp-killed-ports', JSON.stringify(killedPorts)); } catch(e) {}
+    }
 
     // Escape HTML to prevent XSS from dynamic content
     function escapeHtml(str) {
@@ -877,12 +884,13 @@
        * Falls back to retry with backoff if no servers found at all.
        */
       // Expose manual rescan trigger for UI button
-      window.__triggerRescan = function() { wsScanAndConnect(); };
+      window.__triggerRescan = function() { killedPorts = {}; saveKilledPorts(); wsScanAndConnect(); };
 
       window.__killConnection = function(port) {
         for (var i = 0; i < activeConnections.length; i++) {
           if (activeConnections[i].port === port) {
             killedPorts[port] = true;
+            saveKilledPorts();
             activeConnections[i].ws.close();
             return true;
           }
