@@ -272,6 +272,7 @@
     var panelExpanded = false;
     var connectionStartTimes = {}; // port -> Date (when connected)
     var disconnectTimes = {};      // port -> Date (when disconnected)
+    var killedPorts = {};          // port -> true (user-initiated kill, skip reconnect)
 
     // Escape HTML to prevent XSS from dynamic content
     function escapeHtml(str) {
@@ -853,6 +854,7 @@
       window.__killConnection = function(port) {
         for (var i = 0; i < activeConnections.length; i++) {
           if (activeConnections[i].port === port) {
+            killedPorts[port] = true;
             activeConnections[i].ws.close();
             return true;
           }
@@ -913,6 +915,7 @@
               console.log('[MCP Bridge] WebSocket connected to port ' + port + ' (' + activeConnections.length + ' server(s) total)');
               connectionStartTimes[port] = new Date();
               delete disconnectTimes[port];
+              delete killedPorts[port];
               updateSessionCount(activeConnections.length);
               if (panelExpanded) renderConnections();
 
@@ -1054,6 +1057,13 @@
           disconnectTimes[port] = new Date();
           updateSessionCount(activeConnections.length);
           if (panelExpanded) renderConnections();
+
+          // If user intentionally killed this port, don't reconnect
+          if (killedPorts[port]) {
+            delete killedPorts[port];
+            console.log('[MCP Bridge] WebSocket:' + port + ': killed by user, not reconnecting');
+            return;
+          }
 
           // If replaced by same file reconnecting (e.g., plugin reloaded), stop
           // reconnecting — the new connection is authoritative for this file.
