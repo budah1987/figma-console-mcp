@@ -983,6 +983,7 @@
        * then does a full rescan to pick up any new servers.
        */
       function wsReconnectPort(port) {
+        if (killedPorts[port]) return;
         try {
           var testWs = new WebSocket('ws://localhost:' + port);
           var timeout = setTimeout(function() {
@@ -1059,7 +1060,6 @@
 
           // If user intentionally killed this port, don't reconnect
           if (killedPorts[port]) {
-            delete killedPorts[port];
             console.log('[MCP Bridge] WebSocket:' + port + ': killed by user, not reconnecting');
             return;
           }
