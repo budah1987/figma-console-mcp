@@ -912,8 +912,8 @@
 
         var portsToTry = [];
         for (var p = WS_PORT_RANGE_START; p <= WS_PORT_RANGE_END; p++) {
-          // Skip ports we're already connected to
-          if (!isPortConnected(p)) {
+          // Skip ports already connected or intentionally disconnected by user
+          if (!isPortConnected(p) && !killedPorts[p]) {
             portsToTry.push(p);
           }
         }
@@ -951,7 +951,6 @@
               console.log('[MCP Bridge] WebSocket connected to port ' + port + ' (' + activeConnections.length + ' server(s) total)');
               connectionStartTimes[port] = new Date();
               delete disconnectTimes[port];
-              if (killedPorts[port]) { delete killedPorts[port]; saveKilledPorts(); }
               updateSessionCount(activeConnections.length);
               if (panelExpanded) renderConnections();
 
