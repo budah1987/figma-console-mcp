@@ -169,8 +169,14 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 3px 0;
+      padding: 3px 6px;
+      margin: 0 -6px;
+      border-radius: 4px;
       font-size: 10px;
+      transition: background 0.1s;
+    }
+    .conn-row:hover {
+      background: rgba(255, 255, 255, 0.06);
     }
     .conn-dot {
       width: 8px;
@@ -209,16 +215,24 @@
     .kill-btn {
       background: none;
       border: none;
-      color: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.3));
+      color: rgba(255, 255, 255, 0.35);
       cursor: pointer;
-      font-size: 10px;
-      padding: 0 2px;
+      font-size: 13px;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
+      border-radius: 3px;
       opacity: 0;
-      transition: opacity 0.15s;
+      transition: opacity 0.1s, background 0.1s, color 0.1s;
     }
     .conn-row:hover .kill-btn { opacity: 1; }
-    .kill-btn:hover { color: #f24822; }
+    .kill-btn:hover {
+      background: rgba(242, 72, 34, 0.15);
+      color: #f24822;
+    }
 
     /* Light theme additions */
     @media (prefers-color-scheme: light) {
@@ -228,6 +242,7 @@
       .conn-port { color: #999; }
       .conn-label { color: #bbb; }
       .conn-dot.idle { background: rgba(0, 0, 0, 0.12); }
+      .conn-row:hover { background: rgba(0, 0, 0, 0.04); }
       .kill-btn { color: rgba(0, 0, 0, 0.2); }
       .expanded-panel {
         background: #fff;
